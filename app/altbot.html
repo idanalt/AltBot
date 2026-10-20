@@ -1,0 +1,680 @@
+<title>AltBot חדר צוות</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Secular+One&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+  /* Layout: a meeting room. Setup "desk" on the right (RTL start), the live discussion "table" beside it; stacks on phones. */
+  :root {
+    --bg: #f3f5f2;          /* room */
+    --surface: #ffffff;     /* desk */
+    --sunk: #e9ece7;        /* inputs, bubbles */
+    --fg: #1c2420;
+    --muted: #5f6b64;
+    --line: #d6dcd5;
+    --accent: #1f6b52;      /* table felt green */
+    --accent-fg: #ffffff;
+    --accent-soft: #dcebe3;
+    --note: #f6edd6;        /* leader decisions */
+    --note-fg: #5a4512;
+    --bad: #f7e1df;
+    --bad-fg: #8a2a20;
+    --font-display: "Secular One", "IBM Plex Sans Hebrew", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans Hebrew", system-ui, "Segoe UI", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    --r: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121815; --surface: #19211d; --sunk: #222c27; --fg: #e5ece7; --muted: #95a39b; --line: #2e3a34;
+      --accent: #5cc49b; --accent-fg: #0e1612; --accent-soft: #1d3a2e; --note: #33291a; --note-fg: #ecd39c;
+      --bad: #3b201d; --bad-fg: #f2b3aa; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121815; --surface: #19211d; --sunk: #222c27; --fg: #e5ece7; --muted: #95a39b; --line: #2e3a34;
+    --accent: #5cc49b; --accent-fg: #0e1612; --accent-soft: #1d3a2e; --note: #33291a; --note-fg: #ecd39c;
+    --bad: #3b201d; --bad-fg: #f2b3aa; color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 14px;
+  }
+  .app { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: minmax(320px, 410px) 1fr; gap: 16px; height: 100%; }
+  @media (max-width: 860px) { .app { grid-template-columns: 1fr; height: auto; } }
+
+  header.brand { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .brand h1 { font-family: var(--font-display); font-weight: 400; font-size: 28px; margin: 0; letter-spacing: .3px; }
+  .brand p { margin: 0; color: var(--muted); }
+
+  .desk, .table { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; min-height: 0; min-width: 0; }
+  .desk { padding: 16px; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
+  .table { display: flex; flex-direction: column; overflow: hidden; }
+  @media (max-width: 860px) { .desk, .table { overflow: visible; } .table { min-height: 60vh; } }
+
+  .section-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .4px; margin: 0 0 6px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, textarea, select {
+    width: 100%; font: inherit; color: var(--fg); background: var(--sunk); border: 1px solid transparent;
+    border-radius: 8px; padding: 8px 10px;
+  }
+  input:focus, textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  textarea { resize: vertical; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > .grow { flex: 1; min-width: 0; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--fg); padding: 7px 12px;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; padding: 11px; font-size: 16px; }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 4px 8px; }
+  .btn-ghost:hover { color: var(--fg); }
+
+  .agents { display: flex; flex-direction: column; gap: 8px; }
+  .agent { border: 1px solid var(--line); border-radius: var(--r); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .agent.leader { border-color: var(--accent); background: var(--accent-soft); }
+  .agent .emoji { width: 48px; flex: none; text-align: center; padding-inline: 4px; }
+  .agent .name { font-weight: 600; }
+  .agent textarea { font-size: 14px; }
+  .leader-tag { font-size: 12px; color: var(--accent); font-weight: 600; }
+
+  .saved-row { display: flex; gap: 8px; }
+  .hint { font-size: 13px; color: var(--muted); margin: 0; }
+
+  .table-head { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .table-head h2 { font-family: var(--font-display); font-weight: 400; font-size: 20px; margin: 0; }
+  .status { color: var(--muted); font-size: 14px; flex: 1; min-width: 0; }
+  .count { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .feed { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .seats { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seat { display: inline-flex; gap: 4px; align-items: center; font-size: 13px; padding: 2px 8px; border-radius: 999px; background: var(--sunk); color: var(--muted); }
+  .seat.on { background: var(--accent); color: var(--accent-fg); }
+
+  .phase { align-self: center; font-size: 12px; color: var(--muted); letter-spacing: .4px; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; }
+  .msg { background: var(--sunk); border-radius: 12px; padding: 10px 14px; max-width: 100%; min-width: 0; }
+  .msg .who { font-weight: 600; font-size: 14px; margin-bottom: 2px; display: flex; gap: 6px; align-items: center; }
+  .msg .body { overflow-wrap: anywhere; unicode-bidi: plaintext; }
+  .msg .body > :first-child { margin-top: 0; } .msg .body > :last-child { margin-bottom: 0; }
+  .msg .body pre { overflow-x: auto; background: var(--surface); padding: 8px; border-radius: 6px; }
+  .msg .body table { border-collapse: collapse; display: block; overflow-x: auto; }
+  .msg .body td, .msg .body th { border: 1px solid var(--line); padding: 4px 8px; }
+  .msg.you { background: transparent; border: 1px dashed var(--line); }
+  .msg.decision { background: var(--note); color: var(--note-fg); font-size: 14px; }
+  .msg.error { background: var(--bad); color: var(--bad-fg); }
+  .msg.final { background: var(--surface); border: 2px solid var(--accent); padding: 14px 18px; }
+  .msg.final .who { font-family: var(--font-display); font-weight: 400; font-size: 18px; color: var(--accent); }
+  .thinking { color: var(--muted); font-style: italic; }
+  .thinking::after { content: " ●"; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .2; } }
+  @media (prefers-reduced-motion: reduce) { .thinking::after { animation: none; } }
+  .final-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+  .empty { margin: auto; max-width: 440px; text-align: center; color: var(--muted); display: flex; flex-direction: column; gap: 10px; padding: 24px 8px; }
+  .empty .steps { text-align: start; display: flex; flex-direction: column; gap: 6px; }
+  .empty b { color: var(--fg); }
+  .controls { display: flex; gap: 8px; }
+  .controls .btn-primary { flex: 1; }
+</style>
+
+<div class="app">
+  <header class="brand">
+    <h1>🤝 AltBot</h1>
+    <p>הקם צוות סוכנים, תן לכל אחד תפקיד, והם ידונו ביניהם עד שיגיעו לתוצאה.</p>
+  </header>
+
+  <section class="desk" aria-label="הגדרת הצוות">
+    <div>
+      <p class="section-label">צוות</p>
+      <div class="row">
+        <select id="preset" class="grow" aria-label="בחירת צוות"></select>
+        <button id="delTeam" class="btn-ghost" title="מחק את הצוות השמור" hidden>🗑️</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label for="mode">איך מדברים</label>
+        <select id="mode">
+          <option value="round_robin">בסבבים, כל אחד בתורו</option>
+          <option value="moderated">המנהל בוחר מי מדבר</option>
+        </select>
+      </div>
+      <div>
+        <label for="rounds" id="roundsLabel">מספר סבבים</label>
+        <input id="rounds" type="number" min="1" max="20" value="2">
+      </div>
+      <div>
+        <label for="tier">רמת חשיבה</label>
+        <select id="tier">
+          <option value="quick">מהיר</option>
+          <option value="default" selected>רגיל</option>
+          <option value="complex">מעמיק (איטי יותר)</option>
+        </select>
+      </div>
+      <div>
+        <label for="earlyStop">עצירה מוקדמת</label>
+        <select id="earlyStop">
+          <option value="1">המנהל יכול לעצור</option>
+          <option value="0">תמיד כל הסבבים</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <p class="section-label">הסוכנים</p>
+      <div class="agents" id="agents"></div>
+      <div class="row" style="margin-top:8px"><button id="addAgent">＋ הוסף סוכן</button></div>
+    </div>
+
+    <div>
+      <p class="section-label">מנהל הצוות</p>
+      <div id="leader"></div>
+    </div>
+
+    <div>
+      <label for="task" class="section-label">מה אתה רוצה שהצוות יעשה?</label>
+      <textarea id="task" dir="auto" rows="4" placeholder="לדוגמה: תכננו לי אפליקציה לניהול תקציב משפחתי"></textarea>
+    </div>
+
+    <div class="controls">
+      <button id="go" class="btn-primary">התחילו לעבוד</button>
+      <button id="stop" hidden>עצור</button>
+    </div>
+
+    <div>
+      <p class="section-label">שמירת הצוות</p>
+      <div class="saved-row">
+        <input id="teamName" dir="auto" placeholder="שם לצוות" aria-label="שם לצוות">
+        <button id="saveTeam">שמור</button>
+      </div>
+      <p class="hint" id="saveHint"></p>
+    </div>
+  </section>
+
+  <section class="table" aria-label="הדיון">
+    <div class="table-head">
+      <h2>שולחן הדיונים</h2>
+      <span class="status" id="status">מחכה למשימה</span>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="table-head" style="padding-block:8px"><div class="seats" id="seats"></div></div>
+    <div class="feed" id="feed">
+      <div class="empty" id="empty">
+        <div><b>כאן הסוכנים ידברו זה עם זה בזמן אמת.</b></div>
+        <div class="steps">
+          <div>1. בחר צוות מוכן או ערוך את הסוכנים ואת התפקידים שלהם.</div>
+          <div>2. כתוב מה אתה רוצה.</div>
+          <div>3. לחץ על <b>התחילו לעבוד</b>. בסוף מנהל הצוות יכתוב לך את התוצאה הסופית.</div>
+        </div>
+        <div style="font-size:13px">הסוכנים משתמשים בחשבון ה-Claude שלך. בפעם הראשונה תתבקש לאשר.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const PRESETS = [
+  {
+    id: "product", name: "צוות מוצר", mode: "round_robin", rounds: 2,
+    agents: [
+      { emoji: "📋", name: "מנהלת מוצר", role: "מנהלת מוצר בכירה. מתמקדת בבעיה האמיתית של המשתמש, בקהל היעד, בערך המרכזי ובמה לבנות קודם (MVP). נלחמת בהתרחבות מיותרת של הדרישות." },
+      { emoji: "🛠️", name: "מהנדס", role: "מהנדס תוכנה בכיר ופרגמטי. בודק היתכנות טכנית, ארכיטקטורה, מאמץ, סיכונים ואת הדרך הפשוטה ביותר לבנות." },
+      { emoji: "🎨", name: "מעצבת UX", role: "מעצבת חוויית משתמש. חושבת על תהליכי שימוש, פשטות, כניסה ראשונה למוצר ומה יגרום לחוויה להיות נעימה וברורה." },
+      { emoji: "😈", name: "פרקליט השטן", role: "פרקליט השטן. מוצא נקודות חולשה, הנחות סמויות וסיכונים, ומציע איך להתמודד איתם." },
+    ],
+    leader: { emoji: "🧭", name: "ראש הצוות", role: "מוביל את צוות המוצר. כותב תוכנית מוצר ברורה ומעשית: מטרה, משתמשים, פיצ'רים ל-MVP לפי עדיפות, גישה טכנית, סיכונים וצעדים הבאים." },
+  },
+  {
+    id: "research", name: "צוות מחקר וניתוח", mode: "moderated", rounds: 7,
+    agents: [
+      { emoji: "🔬", name: "חוקרת", role: "חוקרת יסודית. מציגה עובדות, רקע, נתונים וידע מבוסס בנושא, ומציינת בכנות איפה יש אי-ודאות." },
+      { emoji: "📊", name: "אנליסט", role: "אנליסט. משווה בין אפשרויות, שוקל יתרונות וחסרונות, מכמת כשאפשר ומסיק מסקנות מהעובדות." },
+      { emoji: "🧐", name: "ספקן", role: "ספקן ביקורתי. מטיל ספק בטענות, בודק את ההיגיון ומצביע על ראיות חסרות ועל הסברים חלופיים." },
+    ],
+    leader: { emoji: "✍️", name: "עורכת ראשית", role: "עורכת ראשית. מכוונת את הדיון לתשובה מבוססת וכותבת דוח סופי ברור ומסודר עם המלצה בשורה התחתונה." },
+  },
+  {
+    id: "content", name: "צוות תוכן ושיווק", mode: "round_robin", rounds: 2,
+    agents: [
+      { emoji: "✒️", name: "קופירייטרית", role: "קופירייטרית יצירתית. מציעה כותרות, פתיחים וניסוחים חדים שתופסים את העין." },
+      { emoji: "🎯", name: "אסטרטג שיווק", role: "אסטרטג שיווק. מתמקד בקהל היעד, במיצוב, בערוצים ובמסר שבאמת יביא תוצאות." },
+      { emoji: "📝", name: "עורכת לשון", role: "עורכת לשון. מוודאת שהטקסט ברור, תקין, טבעי ועקבי בטון." },
+    ],
+    leader: { emoji: "💡", name: "מנהלת קריאייטיב", role: "מנהלת קריאייטיב. מגישה את התוכן המוגמר שהמשתמש ביקש, מלוטש ומוכן לפרסום." },
+  },
+  {
+    id: "decision", name: "חדר החלטות אישי", mode: "round_robin", rounds: 2,
+    agents: [
+      { emoji: "💚", name: "האופטימי", role: "רואה את ההזדמנויות והיתרונות של כל אפשרות ומה יכול להשתבש לטובה." },
+      { emoji: "🛑", name: "הזהיר", role: "רואה את הסיכונים, העלויות והמחירים הנסתרים, ושואל מה קורה אם זה לא מצליח." },
+      { emoji: "🧮", name: "המעשי", role: "מתמקד בצד המעשי: כסף, זמן, צעדים קונקרטיים ואיך בודקים את ההחלטה בקטן לפני שמתחייבים." },
+    ],
+    leader: { emoji: "⚖️", name: "היועץ", role: "יועץ מאוזן. שוקל את כל הקולות וכותב המלצה ברורה עם נימוקים ותוכנית פעולה." },
+  },
+];
+
+const $ = (id) => document.getElementById(id);
+const FINISH = "FINISH";
+const LOCAL_KEY = "altbot.teams.v1";
+const DRAFT_KEY = "altbot.draft.v1";
+
+// ---------- storage: my saved teams (db per person, localStorage fallback) ----------
+let store = null;          // { list(), save(team), remove(id) }
+let myTeams = [];
+
+function localStore() {
+  const read = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { return []; } };
+  const write = (v) => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(v)); } catch {} };
+  return {
+    durable: false,
+    async list() { return read(); },
+    async save(team) { const all = read().filter((t) => t.id !== team.id); all.push(team); write(all); },
+    async remove(id) { write(read().filter((t) => t.id !== id)); },
+  };
+}
+
+async function initStore() {
+  store = localStore();
+  const c = window.claude;
+  if (!c || !c.use) return;
+  try {
+    const [db, user] = await Promise.all([c.use("db"), c.use("user")]);
+    const uid = user ? await user.id() : null;
+    if (!db || !uid) return;
+    const col = db.collection("data/users/" + uid);
+    store = {
+      durable: true,
+      async list() { const s = await col.get(); return s.docs.map((d) => ({ ...d.data(), id: d.id })); },
+      async save(team) { await col.doc(team.id).set(JSON.parse(JSON.stringify(team))); },
+      async remove(id) { await col.doc(id).delete(); },
+    };
+  } catch { /* keep local */ }
+}
+
+async function refreshTeams(selectId) {
+  try { myTeams = await store.list(); } catch { myTeams = []; }
+  myTeams.sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
+  const sel = $("preset");
+  const keep = selectId || sel.value;
+  sel.replaceChildren();
+  if (myTeams.length) {
+    const g = document.createElement("optgroup"); g.label = "הצוותים שלי";
+    for (const t of myTeams) g.append(new Option(t.name, "mine:" + t.id));
+    sel.append(g);
+  }
+  const g2 = document.createElement("optgroup"); g2.label = "צוותים מוכנים";
+  for (const p of PRESETS) g2.append(new Option(p.name, "preset:" + p.id));
+  sel.append(g2);
+  if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  $("delTeam").hidden = !sel.value.startsWith("mine:");
+}
+
+function teamFromSelect() {
+  const v = $("preset").value;
+  if (v.startsWith("mine:")) return myTeams.find((t) => "mine:" + t.id === v);
+  return PRESETS.find((p) => "preset:" + p.id === v);
+}
+
+// ---------- editor ----------
+function agentCard(a, isLeader) {
+  const d = document.createElement("div");
+  d.className = "agent" + (isLeader ? " leader" : "");
+  d.innerHTML = `
+    ${isLeader ? '<span class="leader-tag">מנחה את הדיון וכותב את התוצאה הסופית</span>' : ""}
+    <div class="row">
+      <input class="emoji" maxlength="4" aria-label="אימוג'י">
+      <input class="name grow" dir="auto" placeholder="שם" aria-label="שם הסוכן">
+      ${isLeader ? "" : '<button class="btn-ghost del" title="הסר סוכן" aria-label="הסר סוכן">✕</button>'}
+    </div>
+    <textarea class="role" dir="auto" rows="2" placeholder="מה התפקיד שלו? איך הוא חושב?" aria-label="תפקיד"></textarea>`;
+  d.querySelector(".emoji").value = a.emoji || "🤖";
+  d.querySelector(".name").value = a.name || "";
+  d.querySelector(".role").value = a.role || "";
+  d.querySelector(".del")?.addEventListener("click", () => { d.remove(); saveDraft(); });
+  return d;
+}
+const readCard = (d) => ({
+  emoji: d.querySelector(".emoji").value.trim() || "🤖",
+  name: d.querySelector(".name").value.trim(),
+  role: d.querySelector(".role").value.trim(),
+});
+
+function syncRoundsLabel() {
+  const mod = $("mode").value === "moderated";
+  $("roundsLabel").textContent = mod ? "מקסימום תורות" : "מספר סבבים";
+  $("earlyStop").disabled = mod;
+}
+
+function applyTeam(t) {
+  if (!t) return;
+  $("mode").value = t.mode || "round_robin";
+  $("rounds").value = t.rounds || 2;
+  if (t.tier) $("tier").value = t.tier;
+  if (t.earlyStop !== undefined) $("earlyStop").value = t.earlyStop ? "1" : "0";
+  $("agents").replaceChildren(...(t.agents || []).map((a) => agentCard(a, false)));
+  $("leader").replaceChildren(agentCard(t.leader || { emoji: "🧭", name: "מנהל הצוות", role: "מוביל את הצוות וכותב את התוצאה הסופית." }, true));
+  $("teamName").value = $("preset").value.startsWith("mine:") ? t.name : "";
+  syncRoundsLabel();
+  renderSeats();
+}
+
+function readTeam() {
+  return {
+    name: $("teamName").value.trim() || teamFromSelect()?.name || "הצוות שלי",
+    mode: $("mode").value,
+    rounds: Math.max(1, Math.min(20, parseInt($("rounds").value, 10) || 2)),
+    tier: $("tier").value,
+    earlyStop: $("earlyStop").value === "1",
+    agents: [...$("agents").children].map(readCard),
+    leader: readCard($("leader").firstElementChild),
+  };
+}
+
+function validate(team) {
+  if (!team.agents.length) return "צריך לפחות סוכן אחד בצוות.";
+  const all = [...team.agents, team.leader];
+  if (all.some((a) => !a.name)) return "לכל סוכן צריך שם.";
+  if (all.some((a) => !a.role)) return "לכל סוכן צריך לכתוב תפקיד.";
+  if (new Set(all.map((a) => a.name)).size !== all.length) return "לכל סוכן צריך שם שונה (כולל המנהל).";
+  return null;
+}
+
+function saveDraft() {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ team: readTeam(), task: $("task").value, sel: $("preset").value })); } catch {}
+}
+function loadDraft() { try { return JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch { return null; } }
+
+// ---------- feed rendering ----------
+function md(el, text) {
+  if (window.marked && window.DOMPurify) el.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: true }));
+  else { el.style.whiteSpace = "pre-wrap"; el.textContent = text; }
+}
+function clearFeed() { $("feed").replaceChildren(); }
+function addPhase(label) {
+  const p = document.createElement("div"); p.className = "phase"; p.textContent = label; $("feed").append(p); scroll();
+}
+function addMsg(cls, who, text, { markdown = false, thinking = false } = {}) {
+  const d = document.createElement("div");
+  d.className = "msg " + cls;
+  d.innerHTML = '<div class="who"></div><div class="body" dir="auto"></div>';
+  d.querySelector(".who").textContent = who;
+  const body = d.querySelector(".body");
+  if (thinking) { body.className = "body thinking"; body.textContent = "חושב"; }
+  else if (markdown) md(body, text); else { body.style.whiteSpace = "pre-wrap"; body.textContent = text; }
+  $("feed").append(d); scroll();
+  return d;
+}
+let follow = true;
+$("feed").addEventListener("scroll", () => {
+  const f = $("feed"); follow = f.scrollHeight - f.scrollTop - f.clientHeight < 80;
+});
+function scroll() { if (follow) { const f = $("feed"); f.scrollTop = f.scrollHeight; } }
+
+function renderSeats(active) {
+  const t = readTeam();
+  const seats = [...t.agents, t.leader].map((a) => {
+    const s = document.createElement("span");
+    s.className = "seat" + (a.name === active ? " on" : "");
+    s.textContent = `${a.emoji} ${a.name || "ללא שם"}`;
+    return s;
+  });
+  $("seats").replaceChildren(...seats);
+}
+function setStatus(text, n) { $("status").textContent = text; $("count").textContent = n ? `${n} תורות` : ""; }
+
+// ---------- prompts ----------
+const roster = (t) => [...t.agents.map((a) => `- ${a.name}: ${a.role}`), `- ${t.leader.name} (leader): ${t.leader.role}`].join("\n");
+const MAX_TRANSCRIPT = 120000;
+function transcript(history) {
+  if (!history.length) return "(nobody has spoken yet)";
+  let s = history.map((m) => `[${m.agent}]\n${m.text}`).join("\n\n");
+  if (s.length > MAX_TRANSCRIPT) s = "(earlier messages trimmed)\n…" + s.slice(-MAX_TRANSCRIPT);
+  return s;
+}
+const block = (task, history) => `<user_request>\n${task}\n</user_request>\n\n<discussion>\n${transcript(history)}\n</discussion>`;
+
+function agentPrompt(t, agent, task, history, note) {
+  return `You are ${agent.name}, one member of a team of AI agents collaborating on a request from the user.
+
+Your role:
+${agent.role}
+
+The team:
+${roster(t)}
+
+How the discussion works: members take turns speaking in a shared discussion. On your turn, read everything said so far and contribute from the perspective of your role. Build on, challenge or refine what others said and address them by name. Add something new rather than repeating points already made. If you disagree, say so and explain why. Keep each turn focused and fairly short (roughly 100-250 words) unless the task genuinely needs more. Do not write the final deliverable; the leader, ${t.leader.name}, will do that at the end.
+
+Write in the same language as the user's request. Do not start with your own name or a label; just speak.
+
+${block(task, history)}
+
+${note}
+It is now your turn, ${agent.name}.`;
+}
+
+function leaderIntro(t) {
+  return `You are ${t.leader.name}, the leader of a team of AI agents collaborating on a request from the user.
+
+Your role:
+${t.leader.role}
+
+The team:
+${roster(t)}`;
+}
+
+// ---------- Claude calls ----------
+let sample = null;
+let ctl = null;
+class Stop extends Error {}
+
+const FATAL = new Set(["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "session_expired", "rate_limited", "cancelled"]);
+function errorCopy(code) {
+  return ({
+    not_granted: "לא אישרת ל-AltBot להשתמש ב-Claude. טען את הדף מחדש ואשר כדי להתחיל.",
+    sampling_disabled: "Claude לא זמין בחשבון הזה.",
+    session_expired: "צריך להתחבר מחדש ל-Claude.",
+    rate_limited: "הגעת למגבלת שימוש. נסה שוב בעוד כמה דקות, או הקטן את הצוות או את מספר הסבבים.",
+    refused: "Claude סירב לענות בתור הזה. נסה לנסח את המשימה אחרת.",
+    prompt_too_large: "הדיון ארוך מדי. נסה פחות סבבים או פחות סוכנים.",
+    empty_completion: "לא התקבלה תשובה בתור הזה.",
+    invalid_json: "המנהל לא החזיר החלטה תקינה.",
+  })[code] || "משהו השתבש בחיבור ל-Claude. אפשר לנסות שוב.";
+}
+
+async function speak(t, agent, prompt, { final = false } = {}) {
+  renderSeats(agent.name);
+  const card = addMsg(final ? "final" : "", final ? `${agent.emoji} ${agent.name} · התוצאה הסופית` : `${agent.emoji} ${agent.name}`, "", { thinking: true });
+  const body = card.querySelector(".body");
+  let first = true;
+  try {
+    const { text, truncated } = await sample(prompt, {
+      signal: ctl.signal, cache: false, modelTier: final && t.tier === "quick" ? "default" : t.tier,
+      onText: ({ text }) => { if (first) { body.className = "body"; first = false; } md(body, text); scroll(); },
+    });
+    if (first) body.className = "body";
+    md(body, text);
+    if (truncated) addMsg("error", "⚠️ הערה", "התשובה נקטעה כי הייתה ארוכה מדי.");
+    return { text, card };
+  } catch (e) {
+    const code = e && e.code;
+    if (e && e.text && code !== "refused") { body.className = "body"; md(body, e.text); }
+    else card.remove();
+    if (FATAL.has(code)) throw new Stop(code);
+    addMsg("error", `⚠️ ${agent.name}`, errorCopy(code));
+    return { text: e && code !== "refused" ? e.text || "" : "", card };
+  }
+}
+
+async function decide(t, prompt) {
+  try {
+    return await sample.json(prompt, { signal: ctl.signal, cache: false, modelTier: "quick" });
+  } catch (e) {
+    if (FATAL.has(e && e.code)) throw new Stop(e.code);
+    return null;
+  }
+}
+
+// ---------- orchestration ----------
+async function run(t, task) {
+  const history = [];
+  let turns = 0;
+  const turn = async (agent, note) => {
+    turns++; setStatus(`${agent.name} מדבר/ת`, turns);
+    const { text } = await speak(t, agent, agentPrompt(t, agent, task, history, note));
+    if (text.trim()) history.push({ agent: agent.name, text });
+  };
+
+  if (t.mode === "round_robin") {
+    for (let r = 1; r <= t.rounds; r++) {
+      addPhase(`סבב ${r} מתוך ${t.rounds}`);
+      for (const a of t.agents) await turn(a, `(Round ${r} of ${t.rounds}.)`);
+      if (t.earlyStop && r < t.rounds) {
+        setStatus(`${t.leader.name} בודק/ת אם להמשיך`, turns); renderSeats(t.leader.name);
+        const d = await decide(t, `${leaderIntro(t)}
+
+${block(task, history)}
+
+Round ${r} of ${t.rounds} just ended. Has the team converged enough that another round would add little?
+Reply with only a JSON object: {"done": true or false, "reason": "one short sentence, in the language of the user's request"}`);
+        if (d && typeof d === "object") {
+          addMsg("decision", `${t.leader.emoji} ${t.leader.name}`, String(d.reason || (d.done ? "מספיק, מסכמים." : "ממשיכים לסבב נוסף.")));
+          if (d.done === true) break;
+        }
+      }
+    }
+  } else {
+    addPhase("דיון בהנחיית המנהל");
+    const names = t.agents.map((a) => a.name);
+    for (let i = 1; i <= t.rounds; i++) {
+      setStatus(`${t.leader.name} בוחר/ת מי ידבר`, turns); renderSeats(t.leader.name);
+      const d = await decide(t, `${leaderIntro(t)}
+
+${block(task, history)}
+
+You moderate this discussion (turn ${i} of at most ${t.rounds}). Choose who should speak next and give them a short, specific instruction. Choose "${FINISH}" once the team has enough for an excellent final result.
+Reply with only a JSON object: {"next_speaker": one of ${JSON.stringify([...names, FINISH])}, "instruction": "short instruction, in the language of the user's request"}`);
+      let agent, instruction = "";
+      if (d && typeof d === "object" && (names.includes(d.next_speaker) || d.next_speaker === FINISH)) {
+        instruction = String(d.instruction || "");
+        if (d.next_speaker === FINISH) { addMsg("decision", `${t.leader.emoji} ${t.leader.name}`, instruction || "יש לנו מספיק. מסכמים."); break; }
+        agent = t.agents[names.indexOf(d.next_speaker)];
+        addMsg("decision", `${t.leader.emoji} ${t.leader.name} → ${agent.name}`, instruction);
+      } else {
+        agent = t.agents[(i - 1) % t.agents.length];
+      }
+      await turn(agent, instruction ? `The leader, ${t.leader.name}, asks you: ${instruction}` : "");
+    }
+  }
+
+  addPhase("התוצאה הסופית");
+  setStatus(`${t.leader.name} כותב/ת את התוצאה`, turns);
+  const { text, card } = await speak(t, t.leader, `${leaderIntro(t)}
+
+${block(task, history)}
+
+The discussion is over. Write the final result for the user: the actual deliverable they asked for, built from the strongest ideas in the discussion. Resolve disagreements by making a clear call. Address the user directly, in the language of their request. Do not narrate the discussion or say who suggested what unless it genuinely helps the user. Use Markdown headings and lists where they help.`, { final: true });
+  if (text && card.isConnected) {
+    const actions = document.createElement("div"); actions.className = "final-actions";
+    const copy = document.createElement("button"); copy.textContent = "העתק את התוצאה";
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(text); copy.textContent = "הועתק ✓"; }
+      catch { const r = document.createRange(); r.selectNodeContents(card.querySelector(".body")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copy.textContent = "סומן, העתק עם Ctrl+C"; }
+    };
+    actions.append(copy); card.append(actions);
+  }
+  setStatus("הצוות סיים", turns);
+  renderSeats();
+}
+
+function setRunning(on) {
+  $("go").disabled = on; $("go").textContent = on ? "הצוות עובד…" : "התחילו לעבוד";
+  $("stop").hidden = !on;
+  for (const el of document.querySelectorAll(".desk input, .desk textarea, .desk select, #addAgent, .del, #saveTeam")) el.disabled = on;
+  if (!on) syncRoundsLabel();
+}
+
+$("go").onclick = async () => {
+  const t = readTeam(); const task = $("task").value.trim();
+  const problem = validate(t) || (!task && "כתוב קודם מה אתה רוצה שהצוות יעשה.");
+  clearFeed();
+  if (problem) { addMsg("error", "⚠️ חסר משהו", problem); return; }
+  if (!sample) { addMsg("error", "⚠️ לא זמין", "החיבור ל-Claude לא זמין בתצוגה הזו. פתח את הדף ב-claude.ai כשאתה מחובר לחשבון."); return; }
+  saveDraft();
+  addMsg("you", "🙋 הבקשה שלך", task);
+  follow = true;
+  ctl = new AbortController();
+  setRunning(true);
+  try { await run(t, task); }
+  catch (e) {
+    if (e instanceof Stop) {
+      if (e.message === "cancelled") { addMsg("decision", "⏹️ נעצר", "עצרת את הדיון."); setStatus("נעצר"); }
+      else { addMsg("error", "⚠️ הדיון נעצר", errorCopy(e.message)); setStatus("נעצר"); }
+    } else { addMsg("error", "⚠️ שגיאה", String(e && e.message || e)); setStatus("נעצר"); }
+    renderSeats();
+  }
+  setRunning(false);
+};
+$("stop").onclick = () => ctl?.abort();
+
+$("saveTeam").onclick = async () => {
+  const t = readTeam();
+  const problem = validate(t);
+  if (problem) { $("saveHint").textContent = problem; return; }
+  if (!$("teamName").value.trim()) { $("saveHint").textContent = "תן שם לצוות כדי לשמור אותו."; $("teamName").focus(); return; }
+  const cur = $("preset").value;
+  const existing = myTeams.find((m) => m.name === t.name) || (cur.startsWith("mine:") ? myTeams.find((m) => "mine:" + m.id === cur && m.name === t.name) : null);
+  const id = existing ? existing.id : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  try {
+    await store.save({ ...t, id });
+    await refreshTeams("mine:" + id);
+    $("saveHint").textContent = store.durable ? `"${t.name}" נשמר בחשבון שלך.` : `"${t.name}" נשמר בדפדפן הזה.`;
+  } catch { $("saveHint").textContent = "השמירה נכשלה. נסה שוב."; }
+};
+
+$("delTeam").onclick = async () => {
+  const v = $("preset").value; if (!v.startsWith("mine:")) return;
+  const btn = $("delTeam");
+  if (!btn.dataset.armed) { btn.dataset.armed = "1"; btn.textContent = "למחוק?"; setTimeout(() => { delete btn.dataset.armed; btn.textContent = "🗑️"; }, 3000); return; }
+  delete btn.dataset.armed; btn.textContent = "🗑️";
+  try { await store.remove(v.slice(5)); } catch {}
+  await refreshTeams("preset:" + PRESETS[0].id);
+  applyTeam(teamFromSelect());
+  $("saveHint").textContent = "הצוות נמחק.";
+};
+
+$("preset").onchange = () => { $("delTeam").hidden = !$("preset").value.startsWith("mine:"); applyTeam(teamFromSelect()); saveDraft(); };
+$("mode").onchange = () => { syncRoundsLabel(); saveDraft(); };
+$("addAgent").onclick = () => { const c = agentCard({ emoji: "🤖" }, false); $("agents").append(c); c.querySelector(".name").focus(); renderSeats(); };
+document.querySelector(".desk").addEventListener("input", () => { renderSeats(); saveDraft(); });
+
+// ---------- boot ----------
+(async function boot() {
+  await refreshTeams("preset:" + PRESETS[0].id);
+  const draft = loadDraft();
+  if (draft && draft.team) {
+    if (draft.sel && [...$("preset").options].some((o) => o.value === draft.sel)) $("preset").value = draft.sel;
+    applyTeam(draft.team); $("teamName").value = draft.team.name && draft.sel?.startsWith("mine:") ? draft.team.name : "";
+    $("task").value = draft.task || "";
+  } else {
+    applyTeam(PRESETS[0]);
+    $("task").value = "תכננו לי אפליקציה פשוטה לניהול תקציב משפחתי, שזוג עם שני ילדים באמת ישתמש בה כל שבוע.";
+  }
+  if (window.claude && window.claude.use) {
+    window.claude.use("sample").then((s) => { sample = s; }).catch(() => {});
+    await initStore();
+    await refreshTeams(draft?.sel || $("preset").value);
+    if (draft?.sel?.startsWith("mine:") && $("preset").value === draft.sel) $("teamName").value = draft.team.name || "";
+    $("delTeam").hidden = !$("preset").value.startsWith("mine:");
+  }
+})();
+</script>
