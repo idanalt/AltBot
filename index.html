@@ -1,5 +1,9 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AltBot חדר צוות</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Secular+One&family=IBM+Plex+Sans+Hebrew:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -125,7 +129,17 @@
   .controls { display: flex; gap: 8px; }
   .controls .btn-primary { flex: 1; }
 </style>
-
+<style>
+  .settings { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; }
+  .settings[open] { display: flex; flex-direction: column; gap: 10px; }
+  .settings summary { cursor: pointer; font-weight: 600; }
+  .settings summary .state { font-weight: 400; color: var(--muted); font-size: 13px; margin-inline-start: 6px; }
+  .key-row { display: flex; gap: 8px; }
+  .key-row input { direction: ltr; text-align: left; font-family: var(--font-mono); font-size: 13px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
 <div class="app">
   <header class="brand">
     <h1>🤝 AltBot</h1>
@@ -133,6 +147,39 @@
   </header>
 
   <section class="desk" aria-label="הגדרת הצוות">
+    <details class="settings" id="settings">
+      <summary>⚙️ הגדרות חיבור ל-Claude <span class="state" id="keyState"></span></summary>
+      <div>
+        <label for="apiKey">מפתח API של Anthropic</label>
+        <div class="key-row">
+          <input id="apiKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+          <button id="saveKey">שמור</button>
+        </div>
+        <p class="hint">את המפתח מקבלים ב-<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. הוא נשמר רק בדפדפן הזה ונשלח רק ל-Anthropic.</p>
+      </div>
+      <div class="grid2">
+        <div>
+          <label for="model">מודל</label>
+          <select id="model">
+            <option value="claude-opus-5-5">Claude Opus 5.5</option>
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (זול יותר)</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5 (הכי זול ומהיר)</option>
+            <option value="claude-fable-5-1">Claude Fable 5.1 (הכי חזק, יקר)</option>
+          </select>
+        </div>
+        <div>
+          <label for="effort">עומק חשיבה</label>
+          <select id="effort">
+            <option value="low">נמוך</option>
+            <option value="medium" selected>בינוני</option>
+            <option value="high">גבוה</option>
+            <option value="xhigh">גבוה מאוד</option>
+            <option value="max">מקסימלי</option>
+          </select>
+        </div>
+      </div>
+    </details>
+
     <div>
       <p class="section-label">צוות</p>
       <div class="row">
@@ -152,14 +199,6 @@
       <div>
         <label for="rounds" id="roundsLabel">מספר סבבים</label>
         <input id="rounds" type="number" min="1" max="20" value="2">
-      </div>
-      <div>
-        <label for="tier">רמת חשיבה</label>
-        <select id="tier">
-          <option value="quick">מהיר</option>
-          <option value="default" selected>רגיל</option>
-          <option value="complex">מעמיק (איטי יותר)</option>
-        </select>
       </div>
       <div>
         <label for="earlyStop">עצירה מוקדמת</label>
@@ -212,17 +251,18 @@
       <div class="empty" id="empty">
         <div><b>כאן הסוכנים ידברו זה עם זה בזמן אמת.</b></div>
         <div class="steps">
-          <div>1. בחר צוות מוכן או ערוך את הסוכנים ואת התפקידים שלהם.</div>
-          <div>2. כתוב מה אתה רוצה.</div>
-          <div>3. לחץ על <b>התחילו לעבוד</b>. בסוף מנהל הצוות יכתוב לך את התוצאה הסופית.</div>
+          <div>1. פתח את <b>הגדרות החיבור</b> והדבק מפתח API של Anthropic (פעם אחת).</div>
+          <div>2. בחר צוות מוכן או ערוך את הסוכנים ואת התפקידים שלהם.</div>
+          <div>3. כתוב מה אתה רוצה ולחץ <b>התחילו לעבוד</b>. בסוף מנהל הצוות יכתוב לך את התוצאה הסופית.</div>
         </div>
-        <div style="font-size:13px">הסוכנים משתמשים בחשבון ה-Claude שלך. בפעם הראשונה תתבקש לאשר.</div>
       </div>
     </div>
   </section>
 </div>
 
-<script>
+<script type="module">
+import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.130.0/+esm";
+
 const PRESETS = [
   {
     id: "product", name: "צוות מוצר", mode: "round_robin", rounds: 2,
@@ -265,44 +305,37 @@ const PRESETS = [
 
 const $ = (id) => document.getElementById(id);
 const FINISH = "FINISH";
-const LOCAL_KEY = "altbot.teams.v1";
+const TEAMS_KEY = "altbot.teams.v1";
 const DRAFT_KEY = "altbot.draft.v1";
+const API_KEY = "altbot.apiKey";
+const SETTINGS_KEY = "altbot.settings.v1";
+// Models that accept server-side refusal fallbacks (`fallbacks: "default"`).
+const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"]);
 
-// ---------- storage: my saved teams (db per person, localStorage fallback) ----------
-let store = null;          // { list(), save(team), remove(id) }
+const ls = {
+  get(k, d = null) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ---------- settings ----------
+function syncKeyState() {
+  const has = !!ls.get(API_KEY);
+  $("keyState").textContent = has ? "· מחובר" : "· חסר מפתח";
+  if (!has) $("settings").open = true;
+}
+$("saveKey").onclick = () => {
+  const k = $("apiKey").value.trim();
+  if (k) ls.set(API_KEY, k); else { try { localStorage.removeItem(API_KEY); } catch {} }
+  $("apiKey").value = ""; $("apiKey").placeholder = k ? "המפתח שמור. הדבק מפתח חדש כדי להחליף" : "sk-ant-...";
+  syncKeyState();
+  if (k) $("settings").open = false;
+};
+for (const id of ["model", "effort"]) $(id).onchange = () => ls.set(SETTINGS_KEY, { model: $("model").value, effort: $("effort").value });
+
+// ---------- my saved teams (this browser) ----------
 let myTeams = [];
-
-function localStore() {
-  const read = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch { return []; } };
-  const write = (v) => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(v)); } catch {} };
-  return {
-    durable: false,
-    async list() { return read(); },
-    async save(team) { const all = read().filter((t) => t.id !== team.id); all.push(team); write(all); },
-    async remove(id) { write(read().filter((t) => t.id !== id)); },
-  };
-}
-
-async function initStore() {
-  store = localStore();
-  const c = window.claude;
-  if (!c || !c.use) return;
-  try {
-    const [db, user] = await Promise.all([c.use("db"), c.use("user")]);
-    const uid = user ? await user.id() : null;
-    if (!db || !uid) return;
-    const col = db.collection("data/users/" + uid);
-    store = {
-      durable: true,
-      async list() { const s = await col.get(); return s.docs.map((d) => ({ ...d.data(), id: d.id })); },
-      async save(team) { await col.doc(team.id).set(JSON.parse(JSON.stringify(team))); },
-      async remove(id) { await col.doc(id).delete(); },
-    };
-  } catch { /* keep local */ }
-}
-
-async function refreshTeams(selectId) {
-  try { myTeams = await store.list(); } catch { myTeams = []; }
+function refreshTeams(selectId) {
+  myTeams = ls.get(TEAMS_KEY, []);
   myTeams.sort((a, b) => String(a.name).localeCompare(String(b.name), "he"));
   const sel = $("preset");
   const keep = selectId || sel.value;
@@ -318,7 +351,6 @@ async function refreshTeams(selectId) {
   if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
   $("delTeam").hidden = !sel.value.startsWith("mine:");
 }
-
 function teamFromSelect() {
   const v = $("preset").value;
   if (v.startsWith("mine:")) return myTeams.find((t) => "mine:" + t.id === v);
@@ -340,7 +372,7 @@ function agentCard(a, isLeader) {
   d.querySelector(".emoji").value = a.emoji || "🤖";
   d.querySelector(".name").value = a.name || "";
   d.querySelector(".role").value = a.role || "";
-  d.querySelector(".del")?.addEventListener("click", () => { d.remove(); saveDraft(); });
+  d.querySelector(".del")?.addEventListener("click", () => { d.remove(); renderSeats(); saveDraft(); });
   return d;
 }
 const readCard = (d) => ({
@@ -348,18 +380,15 @@ const readCard = (d) => ({
   name: d.querySelector(".name").value.trim(),
   role: d.querySelector(".role").value.trim(),
 });
-
 function syncRoundsLabel() {
   const mod = $("mode").value === "moderated";
   $("roundsLabel").textContent = mod ? "מקסימום תורות" : "מספר סבבים";
   $("earlyStop").disabled = mod;
 }
-
 function applyTeam(t) {
   if (!t) return;
   $("mode").value = t.mode || "round_robin";
   $("rounds").value = t.rounds || 2;
-  if (t.tier) $("tier").value = t.tier;
   if (t.earlyStop !== undefined) $("earlyStop").value = t.earlyStop ? "1" : "0";
   $("agents").replaceChildren(...(t.agents || []).map((a) => agentCard(a, false)));
   $("leader").replaceChildren(agentCard(t.leader || { emoji: "🧭", name: "מנהל הצוות", role: "מוביל את הצוות וכותב את התוצאה הסופית." }, true));
@@ -367,19 +396,16 @@ function applyTeam(t) {
   syncRoundsLabel();
   renderSeats();
 }
-
 function readTeam() {
   return {
     name: $("teamName").value.trim() || teamFromSelect()?.name || "הצוות שלי",
     mode: $("mode").value,
     rounds: Math.max(1, Math.min(20, parseInt($("rounds").value, 10) || 2)),
-    tier: $("tier").value,
     earlyStop: $("earlyStop").value === "1",
     agents: [...$("agents").children].map(readCard),
     leader: readCard($("leader").firstElementChild),
   };
 }
-
 function validate(team) {
   if (!team.agents.length) return "צריך לפחות סוכן אחד בצוות.";
   const all = [...team.agents, team.leader];
@@ -388,138 +414,157 @@ function validate(team) {
   if (new Set(all.map((a) => a.name)).size !== all.length) return "לכל סוכן צריך שם שונה (כולל המנהל).";
   return null;
 }
-
-function saveDraft() {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ team: readTeam(), task: $("task").value, sel: $("preset").value })); } catch {}
-}
-function loadDraft() { try { return JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch { return null; } }
+const saveDraft = () => ls.set(DRAFT_KEY, { team: readTeam(), task: $("task").value, sel: $("preset").value });
 
 // ---------- feed rendering ----------
 function md(el, text) {
   if (window.marked && window.DOMPurify) el.innerHTML = DOMPurify.sanitize(marked.parse(text, { breaks: true }));
   else { el.style.whiteSpace = "pre-wrap"; el.textContent = text; }
 }
-function clearFeed() { $("feed").replaceChildren(); }
 function addPhase(label) {
   const p = document.createElement("div"); p.className = "phase"; p.textContent = label; $("feed").append(p); scroll();
 }
-function addMsg(cls, who, text, { markdown = false, thinking = false } = {}) {
+function addMsg(cls, who, text, { thinking = false } = {}) {
   const d = document.createElement("div");
   d.className = "msg " + cls;
   d.innerHTML = '<div class="who"></div><div class="body" dir="auto"></div>';
   d.querySelector(".who").textContent = who;
   const body = d.querySelector(".body");
   if (thinking) { body.className = "body thinking"; body.textContent = "חושב"; }
-  else if (markdown) md(body, text); else { body.style.whiteSpace = "pre-wrap"; body.textContent = text; }
+  else { body.style.whiteSpace = "pre-wrap"; body.textContent = text; }
   $("feed").append(d); scroll();
   return d;
 }
 let follow = true;
-$("feed").addEventListener("scroll", () => {
-  const f = $("feed"); follow = f.scrollHeight - f.scrollTop - f.clientHeight < 80;
-});
+$("feed").addEventListener("scroll", () => { const f = $("feed"); follow = f.scrollHeight - f.scrollTop - f.clientHeight < 80; });
 function scroll() { if (follow) { const f = $("feed"); f.scrollTop = f.scrollHeight; } }
-
 function renderSeats(active) {
   const t = readTeam();
-  const seats = [...t.agents, t.leader].map((a) => {
+  $("seats").replaceChildren(...[...t.agents, t.leader].map((a) => {
     const s = document.createElement("span");
     s.className = "seat" + (a.name === active ? " on" : "");
     s.textContent = `${a.emoji} ${a.name || "ללא שם"}`;
     return s;
-  });
-  $("seats").replaceChildren(...seats);
+  }));
 }
 function setStatus(text, n) { $("status").textContent = text; $("count").textContent = n ? `${n} תורות` : ""; }
 
 // ---------- prompts ----------
 const roster = (t) => [...t.agents.map((a) => `- ${a.name}: ${a.role}`), `- ${t.leader.name} (leader): ${t.leader.role}`].join("\n");
-const MAX_TRANSCRIPT = 120000;
 function transcript(history) {
   if (!history.length) return "(nobody has spoken yet)";
-  let s = history.map((m) => `[${m.agent}]\n${m.text}`).join("\n\n");
-  if (s.length > MAX_TRANSCRIPT) s = "(earlier messages trimmed)\n…" + s.slice(-MAX_TRANSCRIPT);
-  return s;
+  return history.map((m) => `[${m.agent}]\n${m.text}`).join("\n\n");
 }
 const block = (task, history) => `<user_request>\n${task}\n</user_request>\n\n<discussion>\n${transcript(history)}\n</discussion>`;
 
-function agentPrompt(t, agent, task, history, note) {
-  return `You are ${agent.name}, one member of a team of AI agents collaborating on a request from the user.
+const agentSystem = (t, a) => `You are ${a.name}, one member of a team of AI agents collaborating on a request from the user.
 
 Your role:
-${agent.role}
+${a.role}
 
 The team:
 ${roster(t)}
 
 How the discussion works: members take turns speaking in a shared discussion. On your turn, read everything said so far and contribute from the perspective of your role. Build on, challenge or refine what others said and address them by name. Add something new rather than repeating points already made. If you disagree, say so and explain why. Keep each turn focused and fairly short (roughly 100-250 words) unless the task genuinely needs more. Do not write the final deliverable; the leader, ${t.leader.name}, will do that at the end.
 
-Write in the same language as the user's request. Do not start with your own name or a label; just speak.
+Write in the same language as the user's request. Do not start with your own name or a label; just speak.`;
 
-${block(task, history)}
-
-${note}
-It is now your turn, ${agent.name}.`;
-}
-
-function leaderIntro(t) {
-  return `You are ${t.leader.name}, the leader of a team of AI agents collaborating on a request from the user.
+const leaderSystem = (t) => `You are ${t.leader.name}, the leader of a team of AI agents collaborating on a request from the user.
 
 Your role:
 ${t.leader.role}
 
 The team:
-${roster(t)}`;
-}
+${roster(t)}
 
-// ---------- Claude calls ----------
-let sample = null;
+Write in the same language as the user's request.`;
+
+// ---------- Claude API ----------
+let client = null;
+let cfg = null;   // { model, effort }
 let ctl = null;
 class Stop extends Error {}
 
-const FATAL = new Set(["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "session_expired", "rate_limited", "cancelled"]);
-function errorCopy(code) {
-  return ({
-    not_granted: "לא אישרת ל-AltBot להשתמש ב-Claude. טען את הדף מחדש ואשר כדי להתחיל.",
-    sampling_disabled: "Claude לא זמין בחשבון הזה.",
-    session_expired: "צריך להתחבר מחדש ל-Claude.",
-    rate_limited: "הגעת למגבלת שימוש. נסה שוב בעוד כמה דקות, או הקטן את הצוות או את מספר הסבבים.",
-    refused: "Claude סירב לענות בתור הזה. נסה לנסח את המשימה אחרת.",
-    prompt_too_large: "הדיון ארוך מדי. נסה פחות סבבים או פחות סוכנים.",
-    empty_completion: "לא התקבלה תשובה בתור הזה.",
-    invalid_json: "המנהל לא החזיר החלטה תקינה.",
-  })[code] || "משהו השתבש בחיבור ל-Claude. אפשר לנסות שוב.";
+function extra(model) {
+  return FALLBACK_MODELS.has(model) ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : {};
 }
 
-async function speak(t, agent, prompt, { final = false } = {}) {
+function errorCopy(e) {
+  if (e instanceof Anthropic.AuthenticationError) return "מפתח ה-API לא תקין. בדוק אותו בהגדרות החיבור.";
+  if (e instanceof Anthropic.PermissionDeniedError) return "למפתח הזה אין הרשאה למודל שבחרת. נסה מודל אחר.";
+  if (e instanceof Anthropic.NotFoundError) return "המודל שבחרת לא זמין בחשבון שלך. נסה מודל אחר.";
+  if (e instanceof Anthropic.RateLimitError) return "הגעת למגבלת הקצב של החשבון. חכה דקה ונסה שוב, או הקטן את הצוות.";
+  if (e instanceof Anthropic.BadRequestError) {
+    const m = String(e.message || "");
+    if (/credit balance/i.test(m)) return "אין מספיק קרדיט בחשבון ה-API. אפשר להוסיף ב-console.anthropic.com תחת Billing.";
+    return "הבקשה נדחתה: " + m;
+  }
+  if (e instanceof Anthropic.InternalServerError) return "השירות של Anthropic עמוס כרגע. נסה שוב בעוד רגע.";
+  if (e instanceof Anthropic.APIConnectionError) return "אין חיבור ל-Anthropic. בדוק את האינטרנט ונסה שוב.";
+  return "משהו השתבש: " + String(e?.message || e);
+}
+function isFatal(e) {
+  return e instanceof Anthropic.APIUserAbortError || e instanceof Anthropic.AuthenticationError ||
+    e instanceof Anthropic.PermissionDeniedError || e instanceof Anthropic.NotFoundError ||
+    e instanceof Anthropic.RateLimitError || e instanceof Anthropic.BadRequestError ||
+    e instanceof Anthropic.APIConnectionError;
+}
+
+async function speak(t, agent, system, prompt, { final = false } = {}) {
   renderSeats(agent.name);
   const card = addMsg(final ? "final" : "", final ? `${agent.emoji} ${agent.name} · התוצאה הסופית` : `${agent.emoji} ${agent.name}`, "", { thinking: true });
   const body = card.querySelector(".body");
-  let first = true;
+  let text = "";
   try {
-    const { text, truncated } = await sample(prompt, {
-      signal: ctl.signal, cache: false, modelTier: final && t.tier === "quick" ? "default" : t.tier,
-      onText: ({ text }) => { if (first) { body.className = "body"; first = false; } md(body, text); scroll(); },
-    });
-    if (first) body.className = "body";
+    const stream = client.beta.messages.stream({
+      model: cfg.model,
+      max_tokens: 16000,
+      system,
+      messages: [{ role: "user", content: prompt }],
+      output_config: { effort: cfg.effort },
+      cache_control: { type: "ephemeral" },
+      ...extra(cfg.model),
+    }, { signal: ctl.signal });
+    for await (const ev of stream) {
+      if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
+        if (!text) body.className = "body";
+        text += ev.delta.text;
+        md(body, text); scroll();
+      }
+    }
+    const msg = await stream.finalMessage();
+    body.className = "body";
+    if (msg.stop_reason === "refusal") {
+      card.remove();
+      addMsg("error", `⚠️ ${agent.name}`, "Claude סירב לענות בתור הזה. נסה לנסח את המשימה אחרת.");
+      return { text: "", card };
+    }
     md(body, text);
-    if (truncated) addMsg("error", "⚠️ הערה", "התשובה נקטעה כי הייתה ארוכה מדי.");
+    if (msg.stop_reason === "max_tokens") addMsg("error", "⚠️ הערה", "התשובה נקטעה כי הייתה ארוכה מדי.");
     return { text, card };
   } catch (e) {
-    const code = e && e.code;
-    if (e && e.text && code !== "refused") { body.className = "body"; md(body, e.text); }
-    else card.remove();
-    if (FATAL.has(code)) throw new Stop(code);
-    addMsg("error", `⚠️ ${agent.name}`, errorCopy(code));
-    return { text: e && code !== "refused" ? e.text || "" : "", card };
+    if (text) { body.className = "body"; md(body, text); } else card.remove();
+    if (isFatal(e)) throw new Stop(e instanceof Anthropic.APIUserAbortError ? "cancelled" : errorCopy(e));
+    addMsg("error", `⚠️ ${agent.name}`, errorCopy(e));
+    return { text, card };
   }
 }
 
-async function decide(t, prompt) {
+async function decide(t, prompt, schema) {
   try {
-    return await sample.json(prompt, { signal: ctl.signal, cache: false, modelTier: "quick" });
+    const res = await client.beta.messages.create({
+      model: cfg.model,
+      max_tokens: 4000,
+      system: leaderSystem(t),
+      messages: [{ role: "user", content: prompt }],
+      output_config: { effort: "low", format: { type: "json_schema", schema } },
+      ...extra(cfg.model),
+    }, { signal: ctl.signal });
+    if (res.stop_reason === "refusal") return null;
+    const block = res.content.find((b) => b.type === "text");
+    return block ? JSON.parse(block.text) : null;
   } catch (e) {
-    if (FATAL.has(e && e.code)) throw new Stop(e.code);
+    if (isFatal(e)) throw new Stop(e instanceof Anthropic.APIUserAbortError ? "cancelled" : errorCopy(e));
     return null;
   }
 }
@@ -530,7 +575,7 @@ async function run(t, task) {
   let turns = 0;
   const turn = async (agent, note) => {
     turns++; setStatus(`${agent.name} מדבר/ת`, turns);
-    const { text } = await speak(t, agent, agentPrompt(t, agent, task, history, note));
+    const { text } = await speak(t, agent, agentSystem(t, agent), `${block(task, history)}\n\n${note}\nIt is now your turn, ${agent.name}.`);
     if (text.trim()) history.push({ agent: agent.name, text });
   };
 
@@ -540,31 +585,34 @@ async function run(t, task) {
       for (const a of t.agents) await turn(a, `(Round ${r} of ${t.rounds}.)`);
       if (t.earlyStop && r < t.rounds) {
         setStatus(`${t.leader.name} בודק/ת אם להמשיך`, turns); renderSeats(t.leader.name);
-        const d = await decide(t, `${leaderIntro(t)}
+        const d = await decide(t, `${block(task, history)}
 
-${block(task, history)}
-
-Round ${r} of ${t.rounds} just ended. Has the team converged enough that another round would add little?
-Reply with only a JSON object: {"done": true or false, "reason": "one short sentence, in the language of the user's request"}`);
-        if (d && typeof d === "object") {
-          addMsg("decision", `${t.leader.emoji} ${t.leader.name}`, String(d.reason || (d.done ? "מספיק, מסכמים." : "ממשיכים לסבב נוסף.")));
-          if (d.done === true) break;
+Round ${r} of ${t.rounds} just ended. Has the team converged enough that another round would add little? Set "done" to true to stop now or false to run another round, and give a one-sentence reason in the language of the user's request.`, {
+          type: "object",
+          properties: { done: { type: "boolean" }, reason: { type: "string" } },
+          required: ["done", "reason"], additionalProperties: false,
+        });
+        if (d) {
+          addMsg("decision", `${t.leader.emoji} ${t.leader.name}`, d.reason || (d.done ? "מספיק, מסכמים." : "ממשיכים לסבב נוסף."));
+          if (d.done) break;
         }
       }
     }
   } else {
     addPhase("דיון בהנחיית המנהל");
     const names = t.agents.map((a) => a.name);
+    const schema = {
+      type: "object",
+      properties: { next_speaker: { type: "string", enum: [...names, FINISH] }, instruction: { type: "string" } },
+      required: ["next_speaker", "instruction"], additionalProperties: false,
+    };
     for (let i = 1; i <= t.rounds; i++) {
       setStatus(`${t.leader.name} בוחר/ת מי ידבר`, turns); renderSeats(t.leader.name);
-      const d = await decide(t, `${leaderIntro(t)}
+      const d = await decide(t, `${block(task, history)}
 
-${block(task, history)}
-
-You moderate this discussion (turn ${i} of at most ${t.rounds}). Choose who should speak next and give them a short, specific instruction. Choose "${FINISH}" once the team has enough for an excellent final result.
-Reply with only a JSON object: {"next_speaker": one of ${JSON.stringify([...names, FINISH])}, "instruction": "short instruction, in the language of the user's request"}`);
+You moderate this discussion (turn ${i} of at most ${t.rounds}). Choose who should speak next and give them a short, specific instruction in the language of the user's request. Choose "${FINISH}" once the team has enough for an excellent final result.`, schema);
       let agent, instruction = "";
-      if (d && typeof d === "object" && (names.includes(d.next_speaker) || d.next_speaker === FINISH)) {
+      if (d && (names.includes(d.next_speaker) || d.next_speaker === FINISH)) {
         instruction = String(d.instruction || "");
         if (d.next_speaker === FINISH) { addMsg("decision", `${t.leader.emoji} ${t.leader.name}`, instruction || "יש לנו מספיק. מסכמים."); break; }
         agent = t.agents[names.indexOf(d.next_speaker)];
@@ -578,11 +626,9 @@ Reply with only a JSON object: {"next_speaker": one of ${JSON.stringify([...name
 
   addPhase("התוצאה הסופית");
   setStatus(`${t.leader.name} כותב/ת את התוצאה`, turns);
-  const { text, card } = await speak(t, t.leader, `${leaderIntro(t)}
+  const { text, card } = await speak(t, t.leader, leaderSystem(t), `${block(task, history)}
 
-${block(task, history)}
-
-The discussion is over. Write the final result for the user: the actual deliverable they asked for, built from the strongest ideas in the discussion. Resolve disagreements by making a clear call. Address the user directly, in the language of their request. Do not narrate the discussion or say who suggested what unless it genuinely helps the user. Use Markdown headings and lists where they help.`, { final: true });
+The discussion is over. Write the final result for the user: the actual deliverable they asked for, built from the strongest ideas in the discussion. Resolve disagreements by making a clear call. Address the user directly. Do not narrate the discussion or say who suggested what unless it genuinely helps the user. Use Markdown headings and lists where they help.`, { final: true });
   if (text && card.isConnected) {
     const actions = document.createElement("div"); actions.className = "final-actions";
     const copy = document.createElement("button"); copy.textContent = "העתק את התוצאה";
@@ -590,7 +636,13 @@ The discussion is over. Write the final result for the user: the actual delivera
       try { await navigator.clipboard.writeText(text); copy.textContent = "הועתק ✓"; }
       catch { const r = document.createRange(); r.selectNodeContents(card.querySelector(".body")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copy.textContent = "סומן, העתק עם Ctrl+C"; }
     };
-    actions.append(copy); card.append(actions);
+    const dl = document.createElement("button"); dl.textContent = "הורד כקובץ";
+    dl.onclick = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+      a.download = "altbot-result.md"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    actions.append(copy, dl); card.append(actions);
   }
   setStatus("הצוות סיים", turns);
   renderSeats();
@@ -599,82 +651,75 @@ The discussion is over. Write the final result for the user: the actual delivera
 function setRunning(on) {
   $("go").disabled = on; $("go").textContent = on ? "הצוות עובד…" : "התחילו לעבוד";
   $("stop").hidden = !on;
-  for (const el of document.querySelectorAll(".desk input, .desk textarea, .desk select, #addAgent, .del, #saveTeam")) el.disabled = on;
+  for (const el of document.querySelectorAll(".desk input, .desk textarea, .desk select, #addAgent, .del, #saveTeam, #saveKey")) el.disabled = on;
   if (!on) syncRoundsLabel();
 }
 
 $("go").onclick = async () => {
   const t = readTeam(); const task = $("task").value.trim();
-  const problem = validate(t) || (!task && "כתוב קודם מה אתה רוצה שהצוות יעשה.");
-  clearFeed();
-  if (problem) { addMsg("error", "⚠️ חסר משהו", problem); return; }
-  if (!sample) { addMsg("error", "⚠️ לא זמין", "החיבור ל-Claude לא זמין בתצוגה הזו. פתח את הדף ב-claude.ai כשאתה מחובר לחשבון."); return; }
+  const key = ls.get(API_KEY);
+  const problem = !key ? "צריך קודם להדביק מפתח API בהגדרות החיבור (למעלה)." : validate(t) || (!task && "כתוב קודם מה אתה רוצה שהצוות יעשה.");
+  $("feed").replaceChildren();
+  if (problem) { addMsg("error", "⚠️ חסר משהו", problem); if (!key) $("settings").open = true; return; }
   saveDraft();
+  client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
+  cfg = { model: $("model").value, effort: $("effort").value };
   addMsg("you", "🙋 הבקשה שלך", task);
+  if (matchMedia("(max-width: 860px)").matches) document.querySelector(".table").scrollIntoView({ behavior: "smooth" });
   follow = true;
   ctl = new AbortController();
   setRunning(true);
   try { await run(t, task); }
   catch (e) {
-    if (e instanceof Stop) {
-      if (e.message === "cancelled") { addMsg("decision", "⏹️ נעצר", "עצרת את הדיון."); setStatus("נעצר"); }
-      else { addMsg("error", "⚠️ הדיון נעצר", errorCopy(e.message)); setStatus("נעצר"); }
-    } else { addMsg("error", "⚠️ שגיאה", String(e && e.message || e)); setStatus("נעצר"); }
-    renderSeats();
+    if (e instanceof Stop && e.message === "cancelled") addMsg("decision", "⏹️ נעצר", "עצרת את הדיון.");
+    else addMsg("error", "⚠️ הדיון נעצר", e instanceof Stop ? e.message : String(e?.message || e));
+    setStatus("נעצר"); renderSeats();
   }
   setRunning(false);
 };
 $("stop").onclick = () => ctl?.abort();
 
-$("saveTeam").onclick = async () => {
+$("saveTeam").onclick = () => {
   const t = readTeam();
   const problem = validate(t);
   if (problem) { $("saveHint").textContent = problem; return; }
   if (!$("teamName").value.trim()) { $("saveHint").textContent = "תן שם לצוות כדי לשמור אותו."; $("teamName").focus(); return; }
-  const cur = $("preset").value;
-  const existing = myTeams.find((m) => m.name === t.name) || (cur.startsWith("mine:") ? myTeams.find((m) => "mine:" + m.id === cur && m.name === t.name) : null);
+  const existing = myTeams.find((m) => m.name === t.name);
   const id = existing ? existing.id : "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  try {
-    await store.save({ ...t, id });
-    await refreshTeams("mine:" + id);
-    $("saveHint").textContent = store.durable ? `"${t.name}" נשמר בחשבון שלך.` : `"${t.name}" נשמר בדפדפן הזה.`;
-  } catch { $("saveHint").textContent = "השמירה נכשלה. נסה שוב."; }
+  ls.set(TEAMS_KEY, [...ls.get(TEAMS_KEY, []).filter((m) => m.id !== id), { ...t, id }]);
+  refreshTeams("mine:" + id);
+  $("saveHint").textContent = `"${t.name}" נשמר בדפדפן הזה.`;
 };
-
-$("delTeam").onclick = async () => {
+$("delTeam").onclick = () => {
   const v = $("preset").value; if (!v.startsWith("mine:")) return;
   const btn = $("delTeam");
   if (!btn.dataset.armed) { btn.dataset.armed = "1"; btn.textContent = "למחוק?"; setTimeout(() => { delete btn.dataset.armed; btn.textContent = "🗑️"; }, 3000); return; }
   delete btn.dataset.armed; btn.textContent = "🗑️";
-  try { await store.remove(v.slice(5)); } catch {}
-  await refreshTeams("preset:" + PRESETS[0].id);
+  ls.set(TEAMS_KEY, ls.get(TEAMS_KEY, []).filter((m) => "mine:" + m.id !== v));
+  refreshTeams("preset:" + PRESETS[0].id);
   applyTeam(teamFromSelect());
   $("saveHint").textContent = "הצוות נמחק.";
 };
-
 $("preset").onchange = () => { $("delTeam").hidden = !$("preset").value.startsWith("mine:"); applyTeam(teamFromSelect()); saveDraft(); };
 $("mode").onchange = () => { syncRoundsLabel(); saveDraft(); };
 $("addAgent").onclick = () => { const c = agentCard({ emoji: "🤖" }, false); $("agents").append(c); c.querySelector(".name").focus(); renderSeats(); };
-document.querySelector(".desk").addEventListener("input", () => { renderSeats(); saveDraft(); });
+document.querySelector(".desk").addEventListener("input", (e) => { if (e.target.id !== "apiKey") { renderSeats(); saveDraft(); } });
 
 // ---------- boot ----------
-(async function boot() {
-  await refreshTeams("preset:" + PRESETS[0].id);
-  const draft = loadDraft();
-  if (draft && draft.team) {
-    if (draft.sel && [...$("preset").options].some((o) => o.value === draft.sel)) $("preset").value = draft.sel;
-    applyTeam(draft.team); $("teamName").value = draft.team.name && draft.sel?.startsWith("mine:") ? draft.team.name : "";
-    $("task").value = draft.task || "";
-  } else {
-    applyTeam(PRESETS[0]);
-    $("task").value = "תכננו לי אפליקציה פשוטה לניהול תקציב משפחתי, שזוג עם שני ילדים באמת ישתמש בה כל שבוע.";
-  }
-  if (window.claude && window.claude.use) {
-    window.claude.use("sample").then((s) => { sample = s; }).catch(() => {});
-    await initStore();
-    await refreshTeams(draft?.sel || $("preset").value);
-    if (draft?.sel?.startsWith("mine:") && $("preset").value === draft.sel) $("teamName").value = draft.team.name || "";
-    $("delTeam").hidden = !$("preset").value.startsWith("mine:");
-  }
-})();
+const s = ls.get(SETTINGS_KEY);
+if (s) { if (s.model) $("model").value = s.model; if (s.effort) $("effort").value = s.effort; }
+if (ls.get(API_KEY)) $("apiKey").placeholder = "המפתח שמור. הדבק מפתח חדש כדי להחליף";
+syncKeyState();
+const draft = ls.get(DRAFT_KEY);
+refreshTeams(draft?.sel || "preset:" + PRESETS[0].id);
+if (draft?.team) {
+  applyTeam(draft.team);
+  if (draft.sel?.startsWith("mine:")) $("teamName").value = draft.team.name || "";
+  $("task").value = draft.task || "";
+} else {
+  applyTeam(PRESETS[0]);
+  $("task").value = "תכננו לי אפליקציה פשוטה לניהול תקציב משפחתי, שזוג עם שני ילדים באמת ישתמש בה כל שבוע.";
+}
 </script>
+</body>
+</html>
